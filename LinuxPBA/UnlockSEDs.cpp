@@ -1,5 +1,6 @@
 /* C:B**************************************************************************
-This software is Copyright 2014-2017 Bright Plaza Inc. <drivetrust@drivetrust.com>
+This software is Copyright 2014-2017 Bright Plaza Inc.
+<drivetrust@drivetrust.com>
 
 This file is part of sedutil.
 
@@ -17,82 +18,107 @@ You should have received a copy of the GNU General Public License
 along with sedutil.  If not, see <http://www.gnu.org/licenses/>.
 
 * C:E********************************************************************** */
-#include "os.h"
 #include "UnlockSEDs.h"
 #include "DtaDevGeneric.h"
 #include "DtaDevOpal1.h"
 #include "DtaDevOpal2.h"
+#include "os.h"
 
+#include <algorithm>
 #include <dirent.h>
 #include <fnmatch.h>
-#include <algorithm>
+#include <iostream>
+#include <string>
+#include <sys/ioctl.h>
+#include <termios.h>
 
 using namespace std;
 
-uint8_t UnlockSEDs(char * password) {
-/* Loop through drives */
-    char devref[25];
-    int failed = 0;
-    DtaDev *tempDev;
-    DtaDev *d;
-    DIR *dir;
-    struct dirent *dirent;
-    vector<string> devices;
-     string tempstring;
-    LOG(D4) << "Enter UnlockSEDs";
-    dir = opendir("/dev");
-    if(dir!=NULL)
-    {
-        while((dirent=readdir(dir))!=NULL) {
-            if((!fnmatch("sd[a-z]",dirent->d_name,0)) || 
-                    (!fnmatch("nvme[0-9]",dirent->d_name,0)) ||
-                    (!fnmatch("nvme[0-9][0-9]",dirent->d_name,0))
-                    ) {
-                tempstring = dirent->d_name;
-                devices.push_back(tempstring);
-            }
-        }
-        closedir(dir);
-    }
-    std::sort(devices.begin(),devices.end());
-    printf("\nScanning....\n");
-    for(uint16_t i = 0; i < devices.size(); i++) {
-                snprintf(devref,23,"/dev/%s",devices[i].c_str());
-        tempDev = new DtaDevGeneric(devref);
-        if (!tempDev->isPresent()) {
-            break;
-        }
-        if ((!tempDev->isOpal1()) && (!tempDev->isOpal2())) {
-            printf("Drive %-10s %-40s not OPAL  \n", devref, tempDev->getModelNum());
+void PrintHorizontallyCentered(string message) {
+  // Get TTY dimensions
+  struct winsize window;
+  ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
+  int const COLS = window.ws_col;
 
-            delete tempDev;
-            continue;
-        }
-        if (tempDev->isOpal2())
-            d = new DtaDevOpal2(devref);
-        else
-            d = new DtaDevOpal1(devref);
-        delete tempDev;
-        d->no_hash_passwords = false;
-        failed = 0;
-        if (d->Locked()) {
-            if (d->MBREnabled()) {
-                if (d->setMBRDone(1, password)) {
-                    failed = 1;
-                }
-            }
-            if (d->setLockingRange(0, OPAL_LOCKINGSTATE::READWRITE, password)) {
-                failed = 1;
-            }
-            failed ? printf("Drive %-10s %-40s is OPAL Failed  \n", devref, d->getModelNum()) :
-                    printf("Drive %-10s %-40s is OPAL Unlocked   \n", devref, d->getModelNum());
-            delete d;
-        }
-        else {
-            printf("Drive %-10s %-40s is OPAL NOT LOCKED   \n", devref, d->getModelNum());
-            delete d;
-        }
+  for (long unsigned int i = 0; i < COLS / 2 - message.length() / 2; i++) {
+    cout << ' ';
+  }
 
+  cout << message;
+}
+
+uint8_t UnlockSEDs(char *password) {
+  /* Loop through drives */
+  char devref[25];
+  int failed = 0;
+  DtaDev *tempDev;
+  DtaDev *d;
+  DIR *dir;
+  struct dirent *dirent;
+  vector<string> devices;
+  string tempstring;
+  LOG(D4) << "Enter UnlockSEDs";
+  dir = opendir("/dev");
+
+  cout << "\n\n";
+
+  if (dir != NULL) {
+    while ((dirent = readdir(dir)) != NULL) {
+      if ((!fnmatch("sd[a-z]", dirent->d_name, 0)) ||
+          (!fnmatch("nvme[0-9]", dirent->d_name, 0)) ||
+          (!fnmatch("nvme[0-9][0-9]", dirent->d_name, 0))) {
+        tempstring = dirent->d_name;
+        devices.push_back(tempstring);
+      }
     }
-    return 0x00;
+    closedir(dir);
+  }
+  std::sort(devices.begin(), devices.end());
+  for (uint16_t i = 0; i < devices.size(); i++) {
+    snprintf(devref, 23, "/dev/%s", devices[i].c_str());
+    tempDev = new DtaDevGeneric(devref);
+    if (!tempDev->isPresent()) {
+      break;
+    }
+    if ((!tempDev->isOpal1()) && (!tempDev->isOpal2())) {
+      PrintHorizontallyCentered("TO SAY THAT THE DRIVE'S NOT OPAL!");
+      delete tempDev;
+      continue;
+    }
+    if (tempDev->isOpal2())
+      d = new DtaDevOpal2(devref);
+    else
+      d = new DtaDevOpal1(devref);
+    delete tempDev;
+    d->no_hash_passwords = false;
+    failed = 0;
+    if (d->Locked()) {
+      if (d->MBREnabled()) {
+        if (d->setMBRDone(1, password)) {
+          failed = 1;
+        }
+      }
+      if (d->setLockingRange(0, OPAL_LOCKINGSTATE::READWRITE, password)) {
+        failed = 1;
+      }
+      /*failed ? printf("Drive %-10s %-40s is OPAL Failed  \n", devref,
+         d->getModelNum()) : printf("Drive %-10s %-40s is OPAL Unlocked   \n",
+         devref, d->getModelNum());*/
+      if (failed) {
+        cout << "\033[1;38;5;184m";
+        PrintHorizontallyCentered("TO BOCK TRAFFIC!");
+      } else {
+        cout << "\033[1;38;5;46m";
+        PrintHorizontallyCentered("TO GET TO THE OTHER SIDE!");
+      }
+      delete d;
+    } else {
+      PrintHorizontallyCentered("TO SAY THAT THE DRIVE'S NOT LOCKED!");
+      delete d;
+    }
+  }
+
+  cout << flush;
+
+  return 0x00;
 };
