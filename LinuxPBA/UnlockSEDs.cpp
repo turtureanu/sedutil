@@ -59,9 +59,6 @@ uint8_t UnlockSEDs(char *password) {
   string tempstring;
   LOG(D4) << "Enter UnlockSEDs";
   dir = opendir("/dev");
-
-  cout << "\n\n";
-
   if (dir != NULL) {
     while ((dirent = readdir(dir)) != NULL) {
       if ((!fnmatch("sd[a-z]", dirent->d_name, 0)) ||
@@ -75,13 +72,14 @@ uint8_t UnlockSEDs(char *password) {
   }
   std::sort(devices.begin(), devices.end());
   for (uint16_t i = 0; i < devices.size(); i++) {
+    cout << "\n\n";
     snprintf(devref, 23, "/dev/%s", devices[i].c_str());
     tempDev = new DtaDevGeneric(devref);
     if (!tempDev->isPresent()) {
       break;
     }
     if ((!tempDev->isOpal1()) && (!tempDev->isOpal2())) {
-      PrintHorizontallyCentered("TO SAY THAT THE DRIVE'S NOT OPAL!");
+      PrintHorizontallyCentered("TO SAY THAT A DRIVE'S NOT OPAL!");
       delete tempDev;
       continue;
     }
@@ -113,7 +111,7 @@ uint8_t UnlockSEDs(char *password) {
       }
       delete d;
     } else {
-      PrintHorizontallyCentered("TO SAY THAT THE DRIVE'S NOT LOCKED!");
+      PrintHorizontallyCentered("TO SAY THAT A DRIVE'S NOT LOCKED!");
       delete d;
     }
   }
